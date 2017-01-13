@@ -1,0 +1,1 @@
+Framework to create customer relationship management applications using php, it offers the basic structure for a good application using good programming practices y las herramientas necesarias para ser extendido.
