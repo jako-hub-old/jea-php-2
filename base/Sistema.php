@@ -11,6 +11,8 @@
 
 namespace Base;
 
+use Exception;
+
 final class Sistema {
 
     /**
@@ -61,6 +63,23 @@ final class Sistema {
 
         return self::$aplicacion;
     }
+    
+    /**
+     * Retorna la única instancia de la aplicación que corre en el sistema
+     * @return \Base\Aplicacion
+     */
+    public static function aplicacion(){
+        return self::$aplicacion;
+    }
+    
+    /**
+     * Retorna la única instancia de la aplicación que corre en el sistema
+     * [Alias - aplicacion]
+     * @return \Base\Aplicacion
+     */
+    public static function ap(){
+        return self::$aplicacion;
+    }
 
     /**
      * Permite importar archivos desde cualquier directorio de la aplicación, para realizar 
@@ -71,7 +90,6 @@ final class Sistema {
      * (El sistema solo importa archivos con extensión php)
      * Alias por defecto en el sistema: 
      * <ul>
-     * 	<li></li>
      *  <li>raiz :				 Ruta base de la aplicación</li>
      * 	<li>base :				 Directorio base del core</li>
      * 	<li>componentesSis :	 Componentes del sistema</li>
@@ -82,21 +100,56 @@ final class Sistema {
      * 	<li>vistas :			 Ruta de las vistas</li>
      * 	<li>modelos :			 Ruta de los modelos</li>
      * </ul>
-     * @param  string  $dirArchivo ruta del archivo que se desea importar
+     * @param  mixed  $recursoAImportar ruta del archivo que se desea importar o array con las rutas
      * @param  boolean $alias      si se usa alias o ruta absoluta
-     * @return boolean             si se logra incluir el archivo
      */
-    public static function importar($dirArchivo, $alias = true) {
+    public static function importar($recursoAImportar, $alias = true) {
+        if(is_string($recursoAImportar)){
+            return self::importarSimple($recursoAImportar, $alias);
+        } else if(is_array($recursoAImportar)){
+            return self::importarMultiple($recursoAImportar, $alias);
+        }
+    }
+    
+    /**
+     * Importa un archivo usando notación de puntos, retorna el contenido del 
+     * archivo (en caso de que el archivo retorne algún contenido)
+     * @param string $dirArchivo
+     * @param  $alias true : Si se usa notación de puntos, false : si se usa ruta absoluta
+     * @return mixed
+     */
+    public static function importarArchivo($dirArchivo, $alias = true){
+        if ($alias) { $dirArchivo = self::resolverRuta($dirArchivo, true); }
+        if (!file_exists($dirArchivo)) { return false; }
+        return include $dirArchivo;
+    }
+    
+    /**
+     * Esta función permite 
+     * @param type $dirArchivo
+     * @param type $alias
+     * @return boolean
+     */
+    private static function importarSimple($dirArchivo, $alias){
         if ($alias) { $dirArchivo = self::resolverRuta($dirArchivo, true); }
         if (!file_exists($dirArchivo)) { return false; }
         return (include_once($dirArchivo)) === 1;
+    }
+    
+    private static function importarMultiple($directorios, $alias){
+        $error = false;
+        foreach($directorios AS $dir){
+            if(!self::importarSimple($dir, $alias)){ 
+                throw new Exception("No se pudo importar '$dir'");
+            }
+        }
+        return $error;
     }
 
     /**
      * Convierte una ruta en notación de puntos (alias.carpeta.carpeta) en una ruta absoluta
      * Alias por defecto en el sistema: 
      * <ul>
-     * 	<li></li>
      *  <li>raiz :				 Ruta base de la aplicación</li>
      * 	<li>base :				 Directorio base del core</li>
      * 	<li>componentesSis :	 Componentes del sistema</li>
