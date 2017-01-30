@@ -51,13 +51,13 @@ final class Sistema {
      *                               configuraciones de la aplicación
      * @return \Base\Aplicacion      Instancia única de la aplicación
      */
-    public static function crearAplicacion($configuracion) {
+    public static function crearAplicacion() {
         self::$dirSistema = realpath(__DIR__);
         self::cargarUtilidades();
         self::importar("base.Aplicacion");
 
         if (self::$aplicacion == null) {
-            self::$aplicacion = \Base\Aplicacion::getInstancia($configuracion);
+            self::$aplicacion = \Base\Aplicacion::getInstancia();
             self::$aplicacion->inicializar();
         }
 

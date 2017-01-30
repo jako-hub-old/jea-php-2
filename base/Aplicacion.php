@@ -47,12 +47,6 @@ final class Aplicacion {
     private $timezone = 'America/Bogota';
 
     /**
-     * Directorio de configuraciones
-     * @var string
-     */
-    private $dirConfg;
-
-    /**
      * Configuraciones de la aplicación
      * @var Array
      */
@@ -71,18 +65,6 @@ final class Aplicacion {
     private $tema;
 
     /**
-     * Ruta solicitada para la aplicación
-     * @var string
-     */
-    private $ruta;
-
-    /**
-     * Url base de la aplicación
-     * @var string
-     */
-    private $urlBase;
-
-    /**
      * Ruta base de la aplicación
      * @var string
      */
@@ -93,24 +75,6 @@ final class Aplicacion {
      * @var string
      */
     private $version = '1.0.0';
-
-    /**
-     * Nombre del componente (controlador o módulo) invocado
-     * @var string
-     */
-    private $componente;
-
-    /**
-     * Nombre del módulo solicitado
-     * @var string
-     */
-    private $modulo;
-
-    /**
-     * Componente (módulo o controlador) que se ejecuta en la aplicación
-     * @var \Base\Componentes\ComponenteAplicacion
-     */
-    private $comPrincipal;
 
     /******************************************************************************
      *          			Manejadores				  * 
@@ -151,10 +115,25 @@ final class Aplicacion {
      */
     private $manejadores = [];
     
+    /**
+     * Controlador activo en la aplicación
+     * @var  \Base\Componentes\Controlador 
+     */
+    private $controladorActivo = null;
+    /**
+     * nombre del método que se llamará del controlador activo
+     * @var string 
+     */
+    private $metodoLlamado = null;
+    /**
+     * Argumentos que serán enviados al método invocado en el controlador
+     * @var string 
+     */
+    private $argsControlador = [];
+    
 
-    private function __construct($dirConfg) {
-        $this->dirConfg = $dirConfg;
-        $this->construirRuta();
+    private function __construct() {
+        $this->cargarConfiguracion();
     }
 
     /**
@@ -162,9 +141,9 @@ final class Aplicacion {
      * @param  string $configuracion ruta dónde se encuentra el archivo de configuración del sistema
      * @return Base\Aplicacion                
      */
-    public static function getInstancia($configuracion) {
+    public static function getInstancia() {
         static $instancia = null;
-        if ($instancia === null){ $instancia = new Aplicacion($configuracion); }
+        if ($instancia === null){ $instancia = new Aplicacion(); }
         return $instancia;
     }
     
@@ -172,12 +151,14 @@ final class Aplicacion {
      * Inicializa los componentes de la aplicación
      */
     public function inicializar() {
-        $this->cargarConfiguracion();
+        Sistema::importar('manejadores.Ruta');
+        # seteamos la ruta actual a la que se quiere acceder
+        \Base\Manejadores\Ruta::setRutaInvocada();
+        # en este archico se setean todas las rutas
+        Sistema::importarArchivo('aplicacion.rutas');
         $this->cargarManejadoresPrincipales();
         $this->cargarManejadoresSecundarios(); # proccess
-        # next step
-//        $this->cargarComponentes();
-//        $this->comPrincipal->inicializar();
+        $this->controladorActivo->inicializar();
     }
     
     /**
@@ -192,7 +173,7 @@ final class Aplicacion {
         else if(!$manejadores['Recurso']){ throw new Exception("Se requiere el manejador Recurso"); } 
         else if(!$manejadores['Sesion']){ throw new Exception("Se requiere el manejador Sesion"); }
         
-        $this->MRuta = $this->cargarManejador('Ruta', $manejadores['Ruta']);
+        $this->MRuta = $this->cargarManejador('Ruta', $manejadores['Ruta'], false);
         $this->MRecurso = $this->cargarManejador('Recurso', $manejadores['Recurso']);
         $this->MSesion = $this->cargarManejador('Sesion', $manejadores['Sesion']);
         
@@ -227,10 +208,11 @@ final class Aplicacion {
      * @param string Nombre de la clase
      * @param array $datos pos[0] ruta del manejador sin el nombre del mismo (en notación de puntos)
      *                     pos[1] namespace del manejador sin el nombre del mismo
+     * @param boolean Si se desea importar la clase del manejador
      * @return \Base\Manejadores\Manejador
      */
-    private function cargarManejador($nombreManejador, $datos){
-        if(!Sistema::importar($datos[0] . "." .  $nombreManejador)){
+    private function cargarManejador($nombreManejador, $datos, $importar = true){
+        if($importar && !Sistema::importar($datos[0] . "." .  $nombreManejador)){
             throw new Exception("No se pudo cargar el manejador '$nombreManejador'");
         }
         
@@ -251,7 +233,10 @@ final class Aplicacion {
      * Carga el archivo de configuraciones de la aplicación
      */
     private function cargarConfiguracion(){
-        $this->configuraciones = Sistema::importarArchivo($this->dirConfg, false);
+        $this->configuraciones = Sistema::importarArchivo("aplicacion.configuraciones.aplicacion", true);
+        if($this->configuraciones == false){
+            throw new Exception("No se pudo cargar el archivo de configuración");
+        }        
         $this->setConfiguracionesAplicacion();
     }
     /**
@@ -268,43 +253,33 @@ final class Aplicacion {
      */
     private function setConfiguracionesAplicacion(){
         $this->nombre = $this->getConfiguracion("nombre");
-    }
-    
-    /**
-     * Toma la ruta invocada para la aplicación, extrae el nombre
-     * del componente (controlador o módulo) y acción invocadas 
-     */
-    private function construirRuta() {
-        # filtramos el contenido de GET
-        /*
-        $g = filter_input_array(INPUT_POST);
-        $r = isset($g['r']) ? $g['r'] : 'principal/panel';        
-        $partes = explode("/", $r);
-        $this->componente = isset($partes[0]) ? $partes[0] : 'principal';
-        $this->accion = isset($partes[1]) ? $partes[1] : 'panel';
-         */
-    }
+    }    
     
     /**
      * Inicia los componentes de la aplicación
      */
     public function iniciar() {
         $this->iniciarManejadores();
-        # $this->comPrincipal->iniciar();
-    }   
+        $this->controladorActivo->iniciar();
+        $this->invocarControlador();
+    }
     
     /**
-     * Carga todos los componentes de la aplicación
+     * Hace llamado a la función 
      */
-    private function cargarComponentes() {
-        $nombre = ucfirst($this->componente);
-        # Buscamos si se intenta acceder a un controlador o a un módulo
-//        if (Sistema::existeArchivo("controladores.$nombre")) {
-//            $this->cargarControlador($nombre);
-//        } else if (Sistema::existeArchivo("modulos.$nombre", true, false)) {
-//            $this->cargarModulo($nombre);
-//        }
+    private function invocarControlador(){
+        call_user_func_array([$this->controladorActivo, $this->metodoLlamado], $this->argsControlador);
     }
+    
+    /**
+     * Indica a la aplicación cual será el controlador activo
+     * @param \Base\Componentes\Controlador $controlador
+     */
+    public function setControladorActivo($controlador, $accion, $argumentos){
+        $this->controladorActivo = $controlador;
+        $this->metodoLlamado = $accion;
+        $this->argsControlador = $argumentos;
+    }   
     
     /**
      * Esta función inicia la ejecución de los manejadores de la aplicación
